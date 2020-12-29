@@ -11,6 +11,12 @@ select * from BankDS;
 select poutcome, count(poutcome) from BankDS
 group by poutcome;
 
+-- counting unique values
+select count(distinct(age)) from BankDS;
+select max(marital)from BankDS;
+select stats_mode(marital) from BankDS;
+select count(marital) from BankDs where marital = 'married';
+
 -- check for null values on marital status, this type of method will be used to test for theother columns of interest
 select count(marital) from BankDs where marital like 'unknown';
 select count(marital) from BankDs;
@@ -32,7 +38,7 @@ with tbl_mean_std as
 (
 select avg(age) m, stddev(age) std from BankDS
 )
-select age, (age-m)/std as z_score from BankDS , tbl_mean_std  order by age;
+select count((age-m)/std) as z_score from BankDS , tbl_mean_std where (age-m)/std > 3 or (age-m)/std < -3 order by age;
 -- for categorical values can using frequency distribution and get the max value and min value
 
 SET SERVEROUTPUT ON;
@@ -70,14 +76,18 @@ End;
 /
 
 Declare
-    v_min_val number(9,0);
-    v_max_val number(9,0);
-    v_median_val number(9,0);
+    v_min_val number;
+    v_max_val number;
+    v_median_val number;
     v_mean_val number;
-    v_chi_sqaure_val number(9,9);
-    v_p_value number(9,9);
-    v_unique_val number(9,9);
-    my_array sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll('AGE');
+    v_chi_sqaure_val number;
+    v_p_value number;
+    v_unique_val number;
+    v_null_values number;
+    v_outliers number;
+    v_z_score_max number;
+    v_z_score_min number;
+    my_array sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll('AGE', 'DURATION', 'CAMPAIGN', 'EMP_VAR_RATE', 'CONS_PRICE_IDX' , 'CONS_CONF_IDX', 'EURIBOR3M', 'NR_EMPLOYED');
 BEGIN
     for col in my_array.first..my_array.last
     loop
@@ -89,8 +99,46 @@ BEGIN
             into v_median_val;
         execute immediate 'select avg('|| my_array(col) || ') from BankDS'
             into v_mean_val;
-        dbms_output.PUT_LINE('Column investigated: ' ||  my_array(col) || ' min value: ' || v_min_val || ' max value: ' || v_max_val || ' median value: ' || v_median_val || ' mean is: ' || v_mean_val);
-          dbms_output.put_line('hello');            
+        IF my_array(col) = 'DURATION' THEN
+--            dbms_output.put_line('Duration Found');
+            execute immediate 'select count('|| my_array(col) || ') from BankDS where '|| my_array(col) || '<= 0'
+                into v_null_values;
+        else
+            dbms_output.put_line('Other Column Found');
+            execute immediate 'select count('|| my_array(col) || ') from BankDS where '|| my_array(col) || '< 0'
+                into v_null_values;
+        end if;
+        
+        -- get Chi square value of this and the dependent variable y
+            execute immediate 'select STATS_CROSSTAB(y ,'|| my_array(col) ||'  , ''CHISQ_OBS'') chi_squared from BankDS'
+                into v_chi_sqaure_val;
+        -- get p_value for this variable and the dependent variable y
+            execute immediate 'select STATS_CROSSTAB(y ,'|| my_array(col) ||'  , ''CHISQ_SIG'') chi_squared from BankDS'
+                into v_p_value;
+        -- get z-score for max value
+            execute immediate 'with bank_mean_std as
+            (
+            select avg('||my_array(col)||') m, stddev('||my_array(col)||') std from BankDS
+            )
+            select ('||my_array(col)||'-m)/std as z_score from BankDS , bank_mean_std where '||my_array(col)||' = '||v_max_val||' and ROWNUM = 1' into v_z_score_max;
+        -- get z-score for min value
+            execute immediate 'with bank_mean_std as
+            (
+            select avg('||my_array(col)||') m, stddev('||my_array(col)||') std from BankDS
+            )
+            select ('||my_array(col)||'-m)/std as z_score from BankDS , bank_mean_std where '||my_array(col)||' = '||v_min_val||' and ROWNUM = 1' into v_z_score_min;
+        -- get possible outliers for this column if z-score is > 3 or <-3
+            execute immediate 'with bank_mean_std as
+            (
+            select avg('||my_array(col)||') m, stddev('||my_array(col)||') std from BankDS
+            )
+            select count(('||my_array(col)||'-m)/std) from BankDS , bank_mean_std where ('||my_array(col)||'-m)/std >3 or ('||my_array(col)||'-m)/std < -3' into v_outliers;
+        dbms_output.PUT_LINE('Column investigated: ' ||  my_array(col) || ' min value: ' || v_min_val || 
+        ' max value: ' || v_max_val || ' median value: ' || v_median_val || ' mean is: ' || v_mean_val || 
+        ' Potential Null Values is: ' || v_null_values || ' Chi-sqaure value for this column and dependent y variable: 
+        ' || v_chi_sqaure_val || ' P_value: ' ||v_p_value || ' zscore for max number is: '|| v_z_score_max||' zscore for min number is: 
+        '|| v_z_score_min || ' Number of outliers: ' ||v_outliers);
+        -- insert this data into the audit table
     end loop;
 END;
 /
