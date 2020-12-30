@@ -1,0 +1,24 @@
+This is to explain some concepts:
+I use a control point node to distribute the data to each model without having
+to create multiple inteconnected to the links from the data source to the models.
+
+I will be able to do multiple types of data tewaks and pass it to control point node
+
+with the interactive decision tree, i'm choosing the highestlogworth value,
+building this new model will allow me to manually choose the splits.
+
+Reason on the impute node for the defalut value to be tree surrogate is
+to configure the impute node to impute missing class values in observsations
+from predicted values from a decision tree
+
+In the default input method of impute node, I set to median, which means that 
+the missing values will be replaces by the median. Median is less sensitive to 
+extreme values than the mean or midrange options.also useful with replacing values
+in skewed distributions
+
+
+Using trsnaformation to address some issues with the data,
+or example I will use the common log transformation to address with the skweness suh like
+duration
+
+For varbialbe selctor, only varialbes with high R-square are kept.
