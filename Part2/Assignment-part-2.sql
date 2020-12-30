@@ -1,3 +1,45 @@
+Drop table DataAudit;
+
+-- data audit table to check the quality if the data (mainly numerical)
+Create Table DataAudit(
+    data_id integer primary key,
+    col_name varchar2(50),
+    min_val number,
+    max_val number,
+    mean_val number,
+    median_val number,
+    unique_val number,
+    outliers number,
+    null_values number,
+    chi_square_val number,
+    z_score_max number,
+    z_score_min number,
+    p_value number,
+    stat_significant varchar(50)
+);
+
+Create Table DataAuditCat(
+    data_id integer primary key,
+    col_name varchar2(50),
+    unique_val number,
+    mode_val varchar2(50),
+    null_val number
+);
+
+-- tp auto increment the ID of the ID report
+Drop Sequence Data_Sequence;
+Create Sequence Data_Sequence
+START WITH 0
+INCREMENT BY 1
+MINVALUE 0;
+
+Drop Sequence DataCat_Sequence;
+Create Sequence DataCat_Sequence
+START WITH 0
+INCREMENT BY 1
+MINVALUE 0;
+
+-- experimental section
 select * from BankDS 
 where ROWNUM = 1;
 
@@ -12,7 +54,7 @@ select poutcome, count(poutcome) from BankDS
 group by poutcome;
 
 -- counting unique values
-select count(distinct(age)) from BankDS;
+select count(distinct(marital)) from BankDS;
 select max(marital)from BankDS;
 select stats_mode(marital) from BankDS;
 select count(marital) from BankDs where marital = 'married';
@@ -43,39 +85,9 @@ select count((age-m)/std) as z_score from BankDS , tbl_mean_std where (age-m)/st
 
 SET SERVEROUTPUT ON;
 
-Declare 
-    test_var number(8,0) := 5;
-    my_array sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll('AGE','JOB','EDUCATION');
-    v_test Varchar2(20);
-Begin
-    for r in my_array.first..my_array.last 
-    loop
-        select my_array(r) into v_test from BankDS 
-        where ROWNUM = 1;
---        dbms_output.put_line(my_array(r));
-        dbms_output.put_line(v_test);
-    end loop;
-    dbms_output.put_line(test_var);
-End;
-/
-
-select 'AGE' from BankDS;
-
-
-Declare 
-    my_array sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll('Duration','PDays','EMP_Var_Rate');
-    v_test number(8,0);
-Begin
-    for r in my_array.first..my_array.last 
-    loop
-        execute immediate 'select max(' || my_array(r) || ') from BankDS'
-                     into v_test;
-        dbms_output.put_line(v_test);
-    end loop;
-End;
-/
-
+-- PLSQL solution for PART B of assignment, Data audit report for each variable
 Declare
+    v_col_name VARCHAR2(50);
     v_min_val number;
     v_max_val number;
     v_median_val number;
@@ -87,10 +99,14 @@ Declare
     v_outliers number;
     v_z_score_max number;
     v_z_score_min number;
+    v_stat_significant VARCHAR2(40);
     my_array sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll('AGE', 'DURATION', 'CAMPAIGN', 'EMP_VAR_RATE', 'CONS_PRICE_IDX' , 'CONS_CONF_IDX', 'EURIBOR3M', 'NR_EMPLOYED');
+    v_most_freq_val VARCHAR2(50);
+    my_array_cat sys.dbms_debug_vc2coll := sys.dbms_debug_vc2coll('JOB', 'MARITAL', 'EDUCATION', 'HOUSING', 'LOAN' , 'MONTH', 'DAY_OF_WEEK', 'POUTCOME');
 BEGIN
     for col in my_array.first..my_array.last
     loop
+        v_col_name := my_array(col);
         execute immediate 'select max('|| my_array(col) || ') from BankDS'
             into v_max_val;
         execute immediate 'select min('|| my_array(col) || ') from BankDS'
@@ -99,6 +115,8 @@ BEGIN
             into v_median_val;
         execute immediate 'select avg('|| my_array(col) || ') from BankDS'
             into v_mean_val;
+        execute immediate 'select count(distinct('|| my_array(col) ||')) from BankDS' 
+            into v_unique_val;
         IF my_array(col) = 'DURATION' THEN
 --            dbms_output.put_line('Duration Found');
             execute immediate 'select count('|| my_array(col) || ') from BankDS where '|| my_array(col) || '<= 0'
@@ -115,6 +133,11 @@ BEGIN
         -- get p_value for this variable and the dependent variable y
             execute immediate 'select STATS_CROSSTAB(y ,'|| my_array(col) ||'  , ''CHISQ_SIG'') chi_squared from BankDS'
                 into v_p_value;
+        IF v_p_value < 0.001 THEN
+            v_stat_significant := 'Statistically Significant';
+        else
+            v_stat_significant := ' NOT Statistically Significant';
+        end if;
         -- get z-score for max value
             execute immediate 'with bank_mean_std as
             (
@@ -133,13 +156,30 @@ BEGIN
             select avg('||my_array(col)||') m, stddev('||my_array(col)||') std from BankDS
             )
             select count(('||my_array(col)||'-m)/std) from BankDS , bank_mean_std where ('||my_array(col)||'-m)/std >3 or ('||my_array(col)||'-m)/std < -3' into v_outliers;
-        dbms_output.PUT_LINE('Column investigated: ' ||  my_array(col) || ' min value: ' || v_min_val || 
-        ' max value: ' || v_max_val || ' median value: ' || v_median_val || ' mean is: ' || v_mean_val || 
-        ' Potential Null Values is: ' || v_null_values || ' Chi-sqaure value for this column and dependent y variable: 
-        ' || v_chi_sqaure_val || ' P_value: ' ||v_p_value || ' zscore for max number is: '|| v_z_score_max||' zscore for min number is: 
-        '|| v_z_score_min || ' Number of outliers: ' ||v_outliers);
+--        dbms_output.PUT_LINE('Column investigated: ' ||  my_array(col) || ' min value: ' || v_min_val || 
+--        ' max value: ' || v_max_val || ' median value: ' || v_median_val || ' mean is: ' || v_mean_val || 
+--        ' Potential Null Values is: ' || v_null_values || ' Chi-sqaure value for this column and dependent y variable: 
+--        ' || v_chi_sqaure_val || ' P_value: ' ||v_p_value || ' zscore for max number is: '|| v_z_score_max||' zscore for min number is: 
+--        '|| v_z_score_min || ' Number of outliers: ' ||v_outliers);
         -- insert this data into the audit table
+           insert into DataAudit values(Data_Sequence.nextval,v_col_name,v_min_val ,v_max_val, v_mean_val, v_median_val , v_unique_val,v_outliers,v_null_values,v_chi_sqaure_val,v_z_score_max,v_z_score_min,v_p_value,v_stat_significant);
+    end loop;
+    for col in my_array_cat.first..my_array_cat.last
+    loop
+        v_col_name := my_array_cat(col);
+        -- get most occuring value
+        execute immediate 'select stats_mode('||my_array_cat(col)||') from BankDS'
+            into v_most_freq_val;
+            dbms_output.put_line(v_most_freq_val);
+        execute immediate 'select count(distinct('||my_array_cat(col)||')) from BankDS'
+            into v_unique_val;
+        -- get number of null values where null is 'unknown'
+        execute immediate 'select count('|| my_array_cat(col) || ') from BankDS where '|| my_array_cat(col) || '=''unknown'''
+            into v_null_values;
+            dbms_output.put_line(v_null_values);
+            insert into DataAuditCat values(DataCat_Sequence.nextval,v_col_name,v_unique_val, v_most_freq_val , v_null_values);
     end loop;
 END;
 /
-select avg(age) from BankDS;
+select * from DataAudit;
+select * from DataAuditCat;
