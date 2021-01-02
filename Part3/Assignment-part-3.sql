@@ -247,7 +247,7 @@ SELECT *
 FROM demo_class_lm_test_results;
 
 
-
+drop table demo_class_lm_confusion_matrix;
 DECLARE
    v_accuracy NUMBER;
 BEGIN
@@ -334,7 +334,7 @@ FROM BankDataTrain;
 
 select * from demo_class_svm_test_results;
 
-
+drop table demo_class_svm_cm;
 DECLARE
    v_accuracy NUMBER;
 BEGIN
@@ -352,10 +352,73 @@ DBMS_DATA_MINING.COMPUTE_CONFUSION_MATRIX (
    target_schema_name => null,
    cost_matrix_schema_name => null,
    score_criterion_type => 'PROBABILITY');
---   DBMS_OUTPUT.PUT_LINE('**** MODEL ACCURACY ****: ' || ROUND(v_accuracy,4));
+   DBMS_OUTPUT.PUT_LINE('**** MODEL ACCURACY ****: ' || ROUND(v_accuracy,4));
 END;
 /
 SELECT *
 FROM demo_class_svm_cm;
 
 
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+--done--
+
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- Random Forest
+drop table rf_model_settings;
+CREATE TABLE rf_model_settings (
+setting_name VARCHAR2(30),
+setting_value VARCHAR2(30));
+
+-- populating the settings table
+BEGIN
+INSERT INTO rf_model_settings (setting_name, setting_value) VALUES (dbms_data_mining.algo_name, 'ALGO_RANDOM_FORESTS');
+END;
+/
+
+-- creating the rf model
+BEGIN
+DBMS_DATA_MINING.CREATE_MODEL(
+   model_name => 'rf_model4',
+   mining_function => dbms_data_mining.classification,
+   data_table_name => 'BankDataTrain',
+   case_id_column_name => 'ID',
+   target_column_name => 'Y',
+   settings_table_name => 'rf_model_settings');
+END;
+/
+
+---- Confusion Matrix
+CREATE OR REPLACE VIEW demo_class_rf_test_results
+AS
+SELECT ID,
+   prediction(rf_model4 USING *) predicted_value,
+   prediction_probability(rf_model4 USING *) probability
+FROM BankDataTrain;
+
+select * from demo_class_rf_test_results;
+
+drop table demo_class_rf_cm;
+DECLARE
+   v_accuracy NUMBER;
+BEGIN
+DBMS_DATA_MINING.COMPUTE_CONFUSION_MATRIX (
+   accuracy => v_accuracy,
+   apply_result_table_name => 'demo_class_rf_test_results',
+   target_table_name => 'BankDataTest',
+   case_id_column_name => 'id',
+   target_column_name => 'y',
+   confusion_matrix_table_name => 'demo_class_rf_cm',
+   score_column_name => 'PREDICTED_VALUE',
+   score_criterion_column_name => 'PROBABILITY',
+   cost_matrix_table_name => null,
+   apply_result_schema_name => null,
+   target_schema_name => null,
+   cost_matrix_schema_name => null,
+   score_criterion_type => 'PROBABILITY');
+   DBMS_OUTPUT.PUT_LINE('**** MODEL ACCURACY ****: ' || ROUND(v_accuracy,4));
+END;
+/
+SELECT *
+FROM demo_class_svm_cm;

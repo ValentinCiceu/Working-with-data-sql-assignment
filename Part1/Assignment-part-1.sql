@@ -22,7 +22,7 @@ select parental_level_of_education , avg (math_score)from stuperftotal
 group by parental_level_of_education;
 
 
--- using listagg to group the parental_level_of_education for ethnicities to see how far the parents went in education based on the ethnicity
+-- 3) using listagg to group the parental_level_of_education for ethnicities to see how far the parents went in education based on the ethnicity
 select parental_level_of_education , LISTAGG(ethnicity,',') WITHIN GROUP (order by ethnicity) as "Ethnicity" from stuperftotal
 group by parental_level_of_education;
 
@@ -63,5 +63,9 @@ from stuperftotal
 order by parental_level_of_education, lead_average_score asc;
 
 
+-- Sample
+create table stuperftotalSample
+as select * from stuperftotal
+Sample(50) SEED(124);
 
-
+select * from stuperftotalSample;
